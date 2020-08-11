@@ -49,6 +49,8 @@ echo %fcount:~-9% > "%dir%%filename%fcount"
 GOTO :EOF
 
 :textadd
+set undo=lcount=2000000000
+set newline=0
 set /a undo+=1
 cls
 if %undo% geq 11 set undo=1
@@ -65,11 +67,9 @@ set lcount=2000000000
 :linebyline
 set /a lcount+=1
 set /p Line= <"%dir%%filename%line%lcount:~-9%"
-set lcount1=%lcount:~-9%
-set /a lcount1+=1
-set /a lcount1-=1
+set /a lcount1=%lcount%-2000000000
 echo Line: %lcount1% : %Line%
-if %lcount:~-9% equ %fcount2% goto :edit
+if %lcount:~-9% geq %fcount2% goto :edit
 goto :linebyline
 
 :edit
@@ -80,8 +80,10 @@ attrib +h "%dir%%filename%%undo%" > nul
 set /p text="Type:" 2> nul
 (echo %text% | findstr /i /c:"/undo" >nul ) && (goto :undo) || (echo. > nul )
 (echo %text% | findstr /i /c:"/redo" >nul ) && (goto :redo) || (echo. > nul )
-(echo %text% | findstr /i /c:"/del" >nul ) && (goto :del) || (echo. > nul )
-(echo %text% | findstr /i /c:"/line" >nul ) && (goto :line) || (echo. > nul )
+(echo %text% | findstr /i /c:"/delfile" >nul ) && (goto :del) || (echo. > nul )
+(echo %text% | findstr /i /c:"/editline" >nul ) && (goto :line) || (echo. > nul )
+(echo %text% | findstr /i /c:"/newline" >nul ) && (goto :newline) || (echo. > nul )
+(echo %text% | findstr /i /c:"/delline" >nul ) && (goto :delline) || (echo. > nul )
 (echo %text% | findstr /i /c:"/linebreak" >nul ) && (goto :linebreak) || (echo. > nul )
 (echo %text% | findstr /i /c:"/exit" >nul ) && (goto :undoclear) || (echo. > nul ) 
 (echo %text% | findstr /i /c:"/help" >nul ) && (goto :help) || (goto :addtext)
@@ -89,6 +91,18 @@ set /p text="Type:" 2> nul
 :addtext
 echo %text% >> "%dir%%filename%" 2> nul
 goto :textadd
+
+:newline
+set newline=1
+goto :line
+
+:delline
+set text=%text:/delline =%
+set lcount=2000000000
+set /a lcount+=%text%
+del /a h "%dir%%filename%line%lcount:~-9%"
+goto :rebuild
+
 
 :fileopen
 set dir=
@@ -115,37 +129,31 @@ type "%dir%%filename%%undo%" > "%dir%%filename%"
 set /a undo-=1 2> nul
 goto :textadd
 
-:del
+:delfile
 del "%dir%%filename%"
-goto :textadd
+:deltemp
+del /a h "%dir%%filename%line%lcount%" 2> nul
+set /a lcount+=1
+if exit equ 1 (
+    if %lcount% geq %fcount2% goto :exit
+)
+if %lcount% geq %fcount2% goto :textadd
 
 :linebreak
 echo. >> "%dir%%filename%"
 goto :textadd
 
 :line
-set text=%text:/line =%
-echo 1
-echo %text%
-pause
+if %newline% equ 1 (
+    set text=%text:/newline =%
+    goto :linepart2
+)
+set text=%text:/editline =%
+
+:linepart2
 set lcount=2000000000
-echo 2
-pause
 set /a lcount+=%text%
-echo 3
-echo %lcount%
-pause
-set lcount1=%lcount:~-9%
-echo 4
-echo %lcount1%
-pause
-set /a lcount1+=1
-echo 5
-echo %lcount1%
-pause
-set /a lcount1+=1
-echo 6
-echo %lcount1%
+set /a lcount1=%lcount%-2000000000
 set /a undo+=1
 cls
 if %undo% geq 11 set undo=1
@@ -153,11 +161,8 @@ echo =====WinTXT -- A Command Line Editor For Windows=====
 echo =====Current Undo State is: %undo%=====
 echo =====%dir%%filename%=====
 echo =====Current Line Is: %lcount1%=====
-echo.
 set /p Line= <"%dir%%filename%line%lcount:~-9%"
 echo Line: %lcount1% : %Line%
-echo %lcount:~-9%%
-echo %line%
 echo.
 attrib -h "%dir%%filename%%undo%" > nul
 copy /y "%dir%%filename%" "%dir%%filename%%undo%" > nul 2>nul
@@ -166,13 +171,25 @@ set /p text="Type:" 2> nul
 (echo %text% | findstr /i /c:"/undo" >nul ) && (goto :undo) || (echo. > nul )
 (echo %text% | findstr /i /c:"/redo" >nul ) && (goto :redo) || (echo. > nul )
 (echo %text% | findstr /i /c:"/del" >nul ) && (goto :del) || (echo. > nul )
-(echo %text% | findstr /i /c:"/line" >nul ) && (goto :line) || (echo. > nul )
 (echo %text% | findstr /i /c:"/linebreak" >nul ) && (goto :linebreak) || (echo. > nul )
 (echo %text% | findstr /i /c:"/exit" >nul ) && (goto :undoclear) || (echo. > nul ) 
-(echo %text% | findstr /i /c:"/help" >nul ) && (goto :help) || (goto :addtextline)
+(echo %text% | findstr /i /c:"/help" >nul ) && (goto :help) || (echo. > nul)
+if %newline% equ 1 (
+     goto :addnewtextline
+)
+goto :addtextline
 
 :addtextline
-echo %text% >> "%dir%%filename%line%lcount:~-9%" 2> nul
+attrib -h "%dir%%filename%line%lcount:~-9%"
+echo %text% > "%dir%%filename%line%lcount:~-9%"
+attrib +h "%dir%%filename%line%lcount:~-9%"
+goto :rebuild
+
+:addnewtextline
+attrib -h "%dir%%filename%line%lcount:~-9%"
+echo %text% >> "%dir%%filename%line%lcount:~-9%"
+attrib +h "%dir%%filename%line%lcount:~-9%"
+set /a fcount2+=1
 goto :rebuild
 
 :rebuild
@@ -180,20 +197,12 @@ echo We can defeat COVID!
 set lcount=2000000000
 
 set /a lcount+=1
-set /p Line= <"%dir%%filename%line%lcount:~-9%"
-set lcount1=%lcount:~-9%
-set /a lcount1+=1
-set /a lcount1-=1
-echo %Line% > "%dir%%filename%"
+type "%dir%%filename%line%lcount:~-9%" > "%dir%%filename%"
 
 :rebuildlinebyline
 set /a lcount+=1
-set /p Line= <"%dir%%filename%line%lcount:~-9%"
-set lcount1=%lcount:~-9%
-set /a lcount1+=1
-set /a lcount1-=1
-echo %Line% >> "%dir%%filename%"
-if %lcount:~-9% equ %fcount2% goto :textadd
+type "%dir%%filename%line%lcount:~-9%" >> "%dir%%filename%"
+if %lcount:~-9% geq %fcount2% goto :textadd
 goto :rebuildlinebyline
 
 
@@ -205,7 +214,10 @@ set undo=11
 if %undo% equ 1 set undo=11
 del /a h "%dir%%filename%%undo%" 2> nul
 set /a undo-=1
-if %undo% leq 1 goto :exit
+if %undo% leq 1 (
+    set exit=1
+    goto :deltemp
+)
 goto :undoclear1
 
 :help
